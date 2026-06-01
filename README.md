@@ -1,10 +1,17 @@
 # Standard Answer Harness
 
-面向授课教师(和像我一样想偷懒bushi)的**“课件口径标准答案”本地 harness**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
+面向授课教师(和像我一样想偷懒bushi)的**“课件口径标准答案”本地 harness和app（测试中）**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
 
 它最大的特点不是“能答题”，而是**不会把模型自己的先验冒充成课件标准答案**。证据不足时它会明说；AI 可以补全，但必须告诉用户“这部分可能与资料不一致，非课件直接依据”。
-(主要是防被查到用了ai🥺）
+(主要是防被查到用了ai🥺，由于ai可能存在的防止学生偷懒的限制，你可以装作老师...）
 事实上，你可以直接告诉agent让它帮你安装....
+
+For instructors (and those who want to slack off like me, just kidding), a local **“courseware answer key” harness**, along with an app (in testing). It parses PDF/Word/PPT courseware into a course knowledge base, retrieves courseware evidence based on the question, and then generates or assists in generating standard answers — while **honestly assessing whether the courseware can actually support the question** before generation.
+
+Its biggest feature is not “being able to answer questions,” but rather **not passing off the model’s own priors as the courseware answer key**. When evidence is insufficient, it will state that clearly; AI can fill in the gaps, but must tell the user “this part may not be consistent with the materials and is not directly based on the courseware.”
+(Mainly to avoid getting caught using AI 🥺. Given the possible restrictions AI has to prevent students from slacking off, you can pretend to be a teacher...)
+In fact, you can just tell the agent to help you install it.
+
 ---
 
 ## 为什么需要它
