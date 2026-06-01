@@ -523,7 +523,8 @@ MIN_EVIDENCE_CHARS = 120
 # If an answer is ungrounded but contains none of these, the harness blocks it.
 HONESTY_MARKERS = (
     "课件证据不足", "未接地", "证据不足", "模型先验", "模型推导",
-    "无法据课件", "课件中未", "未能从课件",
+    "无法据课件", "课件中未", "未能从课件", "可能与资料不一致",
+    "可能和资料不一致", "非课件直接依据", "与课件不一致风险",
 )
 
 
@@ -617,7 +618,8 @@ def _grounding_instructions(verdict: GroundingVerdict | None) -> str:
         return (
             "\n接地状态：未接地（课件未提供可引用依据）。\n"
             "硬性要求：\n"
-            "- 必须在答案开头明确声明“课件证据不足”或“未接地”。\n"
+            "- 允许给出 AI 自己的推导、判断或补充，但必须明确声明："
+            "“以下内容可能与资料不一致，非课件直接依据”。\n"
             "- 凡课件未直接给出的公式/结论，必须逐条标注 `[模型推导]` 或 `[外部资料]`，"
             "不得标注或暗示为课件原文。\n"
             "- 不得虚构课件页码、公式编号或原文表述。\n"
@@ -627,7 +629,8 @@ def _grounding_instructions(verdict: GroundingVerdict | None) -> str:
             "\n接地状态：弱接地（仅碎片证据）。\n"
             "硬性要求：\n"
             "- 仅碎片/标题类证据可引用，超出部分必须标注 `[模型推导]` 或 `[页图核对]`。\n"
-            "- 如需补全连贯推导，请显式说明哪些步骤来自课件、哪些来自模型先验。\n"
+            "- 如需补全连贯推导，可以加入 AI 自己的想法，但必须提示："
+            "“补全部分可能与资料不一致”。\n"
         )
     return (
         "\n接地状态：课件接地。可优先沿用课件证据中的公式与表述，"
@@ -643,14 +646,14 @@ def make_prompt(question: str, evidence: list[SourceBlock], kb: KnowledgeBase, e
     rules = "\n".join(f"- {rule}" for rule in kb.format_rules[:50]) or "- 无自动抽取格式规则"
     external = f"\n\n可选拓展资料，只有在不违背课件时可使用：\n{external_context}" if external_context else ""
     grounding = _grounding_instructions(verdict)
-    return f"""你是授课教师的标准答案生成助手。必须以授课资料为唯一判分标准。
+    return f"""你是授课教师的标准答案生成助手。目标是尽量生成匹配课件口径的标准答案，但必须诚实区分课件依据和 AI 补全。
 
 任务：
-1. 只根据“课件证据”回答题目。
+1. 先复述题目，标题必须为“题目复述”。
 2. 优先沿用课件中的公式、变量名、术语、解题步骤和表述。
-3. 如果证据不足，明确写“课件证据不足”，不要编造。
-4. 输出结构：标准答案、依据、合规自检。
-5. 依据部分列出使用的证据编号。
+3. 允许加入 AI 自己的推导、判断或补充；但凡非课件直接给出的内容，必须说明“可能与资料不一致”。
+4. 输出结构：题目复述、标准答案、依据、资料不一致风险、合规自检。
+5. 依据部分列出使用的证据编号；不得虚构课件页码、公式编号或原文表述。
 6. 凡非课件直接给出的内容，必须按 `[自动抽取] / [页图核对] / [外部资料] / [模型推导]` 标注来源。
 {grounding}
 课件中自动抽取的公式：
@@ -681,7 +684,15 @@ def call_openai(prompt: str, model: str) -> str:
 
 def offline_answer(question: str, evidence: list[SourceBlock], kb: KnowledgeBase, verdict: GroundingVerdict | None = None) -> str:
     if not evidence:
-        return f"## 题目\n{question}\n\n## 标准答案\n课件证据不足，无法生成合规标准答案。\n\n## 合规自检\n- 未找到匹配课件证据。\n"
+        return f"""## 标准答案草稿
+课件证据不足。离线模式不会自行补全答案；如需 AI 补全，请启用模型，并把补全部分标注为 `[模型推导]`，同时说明可能与资料不一致。
+
+## 资料不一致风险
+- 未找到匹配课件证据，任何完整答案都不是课件直接依据。
+
+## 合规自检
+- 未找到匹配课件证据。
+"""
 
     cited = "\n".join(
         f"- [{idx}] {Path(block.source).name} {block.locator}: {block.text[:350]}"
@@ -693,11 +704,8 @@ def offline_answer(question: str, evidence: list[SourceBlock], kb: KnowledgeBase
     # says so plainly instead of producing a confident-looking draft.
     if verdict is not None and verdict.level != "grounded":
         honest = "课件证据不足" if verdict.level == "ungrounded" else "课件证据较薄，需人工/页图核对"
-        return f"""## 题目
-{question}
-
-## 标准答案草稿
-{honest}。未调用大模型，仅列出可引用的课件检索证据，禁止据此编造公式或结论：
+        return f"""## 标准答案草稿
+{honest}。未调用大模型，仅列出可引用的课件检索证据；如需完整作答，可由 AI 补全，但必须标注 `[模型推导]` 并说明可能与资料不一致：
 
 {cited}
 
@@ -709,12 +717,9 @@ def offline_answer(question: str, evidence: list[SourceBlock], kb: KnowledgeBase
 
 ## 合规自检
 - 接地状态：{verdict.level}。
-- 本草稿仅含课件检索碎片，任何超出部分须人工补全并标注 `[模型推导]`/`[外部资料]`。
+- 本草稿仅含课件检索碎片，任何超出部分须标注 `[模型推导]`/`[外部资料]`，并提示可能与资料不一致。
 """
-    return f"""## 题目
-{question}
-
-## 标准答案草稿
+    return f"""## 标准答案草稿
 当前未调用大模型，仅给出基于课件检索的教师用草稿。请依据下列证据组织最终答案：
 
 {cited}
@@ -740,15 +745,17 @@ class ComplianceFinding:
 def compliance_check(answer: str, evidence: list[SourceBlock], kb: KnowledgeBase, verdict: GroundingVerdict | None = None) -> list[ComplianceFinding]:
     """A blocking hard contract, not a rubber stamp.
 
-    The original check only emitted warnings and never failed; an answer that
-    said "依据：[1]" passed even if it was 100% model prior over an empty KB.
-    Now: an ungrounded/weak answer that does NOT honestly self-label is BLOCKED.
+    The gate allows AI supplementation. What it blocks is unlabeled
+    supplementation that looks like courseware-grounded truth.
     """
     findings: list[ComplianceFinding] = []
     has_honest_marker = any(marker in answer for marker in HONESTY_MARKERS)
 
-    if not evidence and "课件证据不足" not in answer:
-        findings.append(ComplianceFinding("block", "没有匹配证据但生成了看似完整的答案。"))
+    if "题目复述" not in answer and "## 题目" not in answer:
+        findings.append(ComplianceFinding("info", "模型正文未含题目复述；harness 外层会自动补上。"))
+
+    if not evidence and not has_honest_marker:
+        findings.append(ComplianceFinding("block", "没有匹配证据但未说明答案可能与资料不一致。"))
 
     if verdict is not None:
         if verdict.level == "ungrounded" and not has_honest_marker:
@@ -756,7 +763,7 @@ def compliance_check(answer: str, evidence: list[SourceBlock], kb: KnowledgeBase
                 "block",
                 "接地度诊断为“未接地”，但答案未声明 "
                 f"{ '/'.join(HONESTY_MARKERS[:3]) } 等诚实标记——"
-                "这会把模型先验冒充成课件标准答案。",
+                "这会把 AI 补全冒充成课件标准答案。",
             ))
         elif verdict.level == "weak" and not has_honest_marker:
             findings.append(ComplianceFinding(
@@ -767,7 +774,7 @@ def compliance_check(answer: str, evidence: list[SourceBlock], kb: KnowledgeBase
             findings.append(ComplianceFinding(
                 "block",
                 "公式/推导类题目且知识库公式数为 0，答案却未标注公式来源——"
-                "公式无法由课件接地，必须逐条标注 `[模型推导]`/`[外部资料]`。",
+                "公式无法由课件接地，必须逐条标注 `[模型推导]`/`[外部资料]`，并说明可能与资料不一致。",
             ))
 
     for formula in kb.formulas[:50]:
@@ -1072,8 +1079,9 @@ def command_answer(args: argparse.Namespace) -> int:
         gate = "**未通过（存在拦截项，请勿直接作为标准答案发布）**" if blocked else "通过"
 
         banner = provenance_banner(verdict)
+        question_recap = f"## 题目复述\n{question}"
         sections.append(
-            f"# 第 {idx} 题\n\n{banner}\n\n{answer}\n\n"
+            f"# 第 {idx} 题\n\n{question_recap}\n\n{banner}\n\n{answer}\n\n"
             f"## Harness 合规校验\n- 合规闸门：{gate}\n{finding_text}\n"
         )
 

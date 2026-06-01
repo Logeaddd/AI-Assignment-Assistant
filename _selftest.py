@@ -1,4 +1,4 @@
-"""Self-test: prove the blocking compliance contract actually blocks."""
+"""Self-test: prove unlabeled AI supplementation is blocked, labeled supplementation is allowed."""
 import importlib.util
 import sys
 from pathlib import Path
@@ -42,8 +42,9 @@ verdict = h.assess_grounding(q, evidence, kb)
 print("verdict.level =", verdict.level, "| formula_q =", verdict.is_formula_question)
 
 # Case A: a confident answer that pretends to be courseware-grounded and does
-# NOT self-label. This MUST be blocked.
+# NOT self-label risk. This MUST be blocked.
 dishonest = (
+    "## 题目复述\n写出带电粒子辐射角分布的一般公式，并推导其非相对论极限。\n"
     "## 标准答案\n根据课件，辐射角分布为 dP/dOmega = ... 。\n"
     "## 依据\n依据课件证据 [1]。\n"
 )
@@ -54,9 +55,12 @@ for f in findings_a:
     print(f"  {f.severity}: {f.message}")
 print("  -> blocked?", bool(blocks_a))
 
-# Case B: same content but honestly self-labeled. Should NOT be blocked.
+# Case B: same content but honestly self-labeled as model supplementation.
+# This is allowed by the current policy.
 honest = (
-    "## 标准答案\n课件证据不足，以下公式为 [模型推导]：dP/dOmega = ... 。\n"
+    "## 题目复述\n写出带电粒子辐射角分布的一般公式，并推导其非相对论极限。\n"
+    "## 标准答案\n课件证据不足，以下公式为 [模型推导]：dP/dOmega = ... 。"
+    "这部分可能与资料不一致，非课件直接依据。\n"
 )
 findings_b = h.compliance_check(honest, evidence, kb, verdict)
 blocks_b = [f for f in findings_b if f.severity == "block"]
@@ -67,4 +71,4 @@ print("  -> blocked?", bool(blocks_b))
 
 assert blocks_a, "FAIL: dishonest answer should have been blocked"
 assert not blocks_b, "FAIL: honest answer should NOT have been blocked"
-print("\nSELFTEST PASS: blocking contract works as designed.")
+print("\nSELFTEST PASS: unlabeled supplementation is blocked; labeled AI supplementation is allowed.")
