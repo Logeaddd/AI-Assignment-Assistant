@@ -3,9 +3,9 @@ Set-Location -LiteralPath $PSScriptRoot
 
 function Get-PythonCommand {
   $py = Get-Command py -ErrorAction SilentlyContinue
-  if ($py) { return @("py") }
+  if ($py) { return "py" }
   $python = Get-Command python -ErrorAction SilentlyContinue
-  if ($python) { return @("python") }
+  if ($python) { return "python" }
   throw "Python was not found. Please install Python 3.11+ and try again."
 }
 
@@ -42,7 +42,7 @@ function Get-FreePort {
 $pythonCmd = Get-PythonCommand
 
 if (-not (Test-Path ".venv")) {
-  & $pythonCmd[0] -m venv .venv
+  & $pythonCmd -m venv .venv
 }
 
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
