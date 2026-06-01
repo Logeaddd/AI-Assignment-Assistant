@@ -218,8 +218,3 @@ python _selftest.py
 
 ---
 
-## 发布到 GitHub 前请注意
-
-- 仓库已带 `.gitignore`，默认忽略 `out/`（生成产物）和 `*.pptx/*.docx/*.pdf`（课件原件可能含版权内容）。
-- 建议把 `standard_answer_harness/` 作为独立仓库发布，**不要**把上层目录里的课件一起推上去。
-- 示例题目（`*.md`）如含真实课程内容，发布前请脱敏。
