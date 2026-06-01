@@ -12,3 +12,6 @@ openai==2.32.0
 
 # 可选：仅 `homework-last-page --ocr` / `ocr-pages` 在本机安装 Tesseract 后使用
 pytesseract==0.3.13
+
+# 本地极简 UI
+streamlit==1.52.1

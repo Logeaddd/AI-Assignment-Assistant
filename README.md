@@ -46,6 +46,31 @@ pip install -r requirements.txt
 
 ## 核心命令
 
+## 本地极简 App
+
+启动：
+
+```bash
+python -m streamlit run app.py
+```
+
+如果在项目根目录运行：
+
+```bash
+python -m streamlit run standard_answer_harness/app.py
+```
+
+浏览器打开本地地址后可完成：
+
+- 上传 PDF / DOCX / PPTX / TXT / MD 课件。
+- 诊断 PDF 是否为扫描/图片型。
+- 生成最后页图和 contact sheet。
+- 输入题目。
+- 在侧栏填写 API Key / Base URL / Model。
+- 选择离线证据草稿或调用模型生成完整答案。
+
+API Key 只在本地 Streamlit 会话中使用，不写入仓库。
+
 ### 0. `diagnose-pdf` — 先判断 PDF 是文本型还是扫描型
 
 ```bash
