@@ -1,6 +1,10 @@
 # Standard Answer Harness
 
-面向授课教师的**“课件口径标准答案”本地 harness**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
+单纯用AI作答，常会出现编造内容、缺漏要点的情况，符号与行文风格不符也容易暴露AI痕迹。这套流程会基于课件规范AI输出，杜绝随意发挥，生成规整标准的答案，老师和学生都能用。
+
+Standalone AI may produce fictional or incomplete answers, and mismatched symbols will give away AI-generated content. Our system guides the AI to follow course materials closely and refrain from random creation, resulting in well-organized standard answers that serve both teachers and students well.
+
+面向授课教师（或者学生）的**“课件口径标准答案”本地 harness**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
 
 它最大的特点不是“能答题”，而是**不会把模型自己的先验冒充成课件标准答案**。证据不足时它会明说；AI 可以补全，但必须告诉用户“这部分可能与资料不一致，非课件直接依据”。
 
