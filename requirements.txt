@@ -1,0 +1,14 @@
+# 核心依赖：解析课件、构建知识库、离线检索均需要
+python-docx==1.2.0
+python-pptx==1.0.2
+pdfplumber==0.11.9
+PyPDF2==3.0.1
+PyMuPDF==1.26.6
+Pillow==12.0.0
+
+# 可选：仅在启用大模型生成完整答案时需要
+# 不装也能用 build / inspect / diagnose / answer 的离线检索模式
+openai==2.32.0
+
+# 可选：仅 `homework-last-page --ocr` / `ocr-pages` 在本机安装 Tesseract 后使用
+pytesseract==0.3.13
