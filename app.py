@@ -184,13 +184,13 @@ def main() -> None:
         run_mode = st.radio(
             "使用方式",
             [
-                "交给 agent / 离线证据草稿",
-                "使用我自己的兼容 API",
+                "本地证据草稿（不填 API）",
+                "填写 API 生成完整答案",
             ],
             index=0,
-            help="默认不要求用户提供 OpenAI Key。你可以把诊断、页图和证据交给 agent 继续处理；也可以填自己的 API。"
+            help="普通用户选第二项并填写自己的 API；不填 API 时只生成课件证据草稿。Agent 使用请走命令行 harness，不需要打开这个网页。"
         )
-        use_model = run_mode == "使用我自己的兼容 API"
+        use_model = run_mode == "填写 API 生成完整答案"
         default_api_key = local_config.get("api_key") or os.getenv("OPENAI_API_KEY", "")
         default_base_url = local_config.get("base_url") or os.getenv("OPENAI_BASE_URL", "")
         default_model = local_config.get("model") or os.getenv("STANDARD_ANSWER_MODEL", "gpt-4.1-mini")
@@ -290,7 +290,7 @@ def main() -> None:
                 st.error("请先上传课件。")
                 return
             if use_model and (not api_key.strip() or not model.strip()):
-                st.error("自定义 API 模式需要 API Key 和 Model。默认模式不需要 key。")
+                st.error("填写 API 生成完整答案需要 API Key 和 Model。本地证据草稿模式不需要 key。")
                 return
             text_questions = split_questions(questions_text) if questions_text.strip() else []
             questions = [{"type": "text", "text": q, "image_paths": []} for q in text_questions]

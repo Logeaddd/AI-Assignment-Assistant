@@ -3,16 +3,6 @@
 面向授课教师的**“课件口径标准答案”本地 harness**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
 
 它最大的特点不是“能答题”，而是**不会把模型自己的先验冒充成课件标准答案**。证据不足时它会明说；AI 可以补全，但必须告诉用户“这部分可能与资料不一致，非课件直接依据”。
-(主要是防被查到用了ai🥺，由于ai可能存在的防止学生偷懒的限制，你可以装作老师...）
-
-**事实上，你可以直接告诉agent让它帮你安装....**
-
-For instructors (and those who want to slack off like me, just kidding), a local **“courseware answer key” harness**, along with an app (in testing). It parses PDF/Word/PPT courseware into a course knowledge base, retrieves courseware evidence based on the question, and then generates or assists in generating standard answers — while **honestly assessing whether the courseware can actually support the question** before generation.
-
-Its biggest feature is not “being able to answer questions,” but rather **not passing off the model’s own priors as the courseware answer key**. When evidence is insufficient, it will state that clearly; AI can fill in the gaps, but must tell the user “this part may not be consistent with the materials and is not directly based on the courseware.”
-(Mainly to avoid getting caught using AI 🥺. Given the possible restrictions AI has to prevent students from slacking off, you can pretend to be a teacher...)
-
-**In fact, you can just tell the agent to help you install it.**
 
 ---
 
@@ -27,16 +17,39 @@ Its biggest feature is not “being able to answer questions,” but rather **no
 
 ---
 
-## 安装
+## 两种使用方式
+
+### 1. 普通用户版
+
+普通用户不需要看 `pip install`。
+
+下载 `AI-Assignment-Assistant-user.zip`，解压后双击：
+
+```text
+run_windows.bat
+```
+
+它会自动创建环境、安装依赖、启动本地 app。
+
+### 2. Agent / Harness 版
+
+如果你是让 agent 使用，直接把这个仓库交给 agent。Agent 可以调用：
+
+```bash
+python harness.py diagnose-pdf --pdf course.pdf
+python harness.py prep-pdf --pdf course.pdf --out tmp/pdfs/course_prep
+python harness.py answer --kb out/course_kb.json --questions questions.md
+```
+
+这一路不需要普通用户打开网页。
+
+### 开发者手动安装
+
+只有开发者才需要：
 
 ```bash
 pip install -r requirements.txt
 ```
-
-- 核心依赖：`python-docx` / `python-pptx` / `pdfplumber` / `PyPDF2`
-- `PyMuPDF` / `Pillow` 用于渲染 PDF 页图和 contact sheet。
-- `openai` 是可选的：不装也能用 `build` / `diagnose` / `inspect` / `answer` 的**离线检索模式**，只是 `answer` 不会在工具内部调用模型生成连贯答案，而是给出“课件证据草稿”。用户也可以把草稿、页图和诊断结果直接交给自己的 agent 继续处理。
-- `pytesseract` 只是 OCR 接口；本机还必须安装 Tesseract 可执行程序。没有 OCR 引擎时，harness 会明确提示不可用，不会假装识别成功。
 
 ---
 
@@ -88,7 +101,7 @@ python -m streamlit run standard_answer_harness/app.py
 - 诊断 PDF 是否为扫描/图片型。
 - 生成最后页图和 contact sheet。
 - 输入文字题目，或上传题目图片；题目图片支持多张，可合并为一道题或按图片拆分。
-- 默认使用“交给 agent / 离线证据草稿”模式，不要求用户提供 OpenAI Key。
+- 默认使用“本地证据草稿（不填 API）”模式，不要求用户提供 OpenAI Key。
 - 可选填写自己的 API Key / Base URL / Model，调用 OpenAI 或 OpenAI-compatible 服务生成完整答案。
 - 也可以直接在 UI 里保存本机配置，系统会写到 `standard_answer_harness/.local_config.json`，不会进仓库。
 
@@ -97,9 +110,9 @@ API Key 只在本地 Streamlit 会话中使用，不写入仓库。
 重要提醒：
 
 - 如果你处理的是扫描 PDF、截图、页图核对等视觉任务，请选择**支持图片输入的模型**。
-- 如果题目本身是截图/照片，请选择**支持图片输入的模型**，或把题目图片交给能看图的 agent。
+- 如果题目本身是截图/照片，请选择**支持图片输入的模型**。
 - 如果模型只支持文本输入，它只能处理 harness 抽取到的文字，不能理解渲染出来的页图或题目图片。
-- 不想填 key 时，直接使用默认模式，把输出的诊断、contact sheet、页图和证据草稿交给 agent 使用即可。
+- 不想填 key 时，直接使用默认模式生成本地证据草稿。
 
 ### 0. `diagnose-pdf` — 先判断 PDF 是文本型还是扫描型
 
