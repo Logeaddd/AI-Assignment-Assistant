@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import tempfile
+import base64
 from pathlib import Path
 
 import streamlit as st
@@ -28,22 +29,62 @@ def save_uploads(files) -> list[Path]:
     return saved
 
 
-def call_model(prompt: str, api_key: str, base_url: str, model: str) -> str:
+def image_to_data_url(path: Path) -> str:
+    mime = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }.get(path.suffix.lower(), "application/octet-stream")
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+def save_question_images(files) -> list[Path]:
+    image_dir = WORK_DIR / "question_images"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    saved: list[Path] = []
+    for idx, file in enumerate(files, 1):
+        safe_name = Path(file.name).name
+        target = image_dir / f"{idx:02}_{safe_name}"
+        target.write_bytes(file.getbuffer())
+        saved.append(target)
+    return saved
+
+
+def call_model(prompt: str, api_key: str, base_url: str, model: str, image_paths: list[Path] | None = None) -> str:
     from openai import OpenAI
 
     kwargs = {"api_key": api_key}
     if base_url.strip():
         kwargs["base_url"] = base_url.strip()
     client = OpenAI(**kwargs)
+    image_paths = image_paths or []
 
     try:
-        response = client.responses.create(model=model, input=prompt)
+        if image_paths:
+            content = [{"type": "input_text", "text": prompt}]
+            for image_path in image_paths:
+                content.append({"type": "input_image", "image_url": image_to_data_url(image_path)})
+            response = client.responses.create(
+                model=model,
+                input=[{"role": "user", "content": content}],
+            )
+        else:
+            response = client.responses.create(model=model, input=prompt)
         return response.output_text
     except Exception as responses_error:
         try:
+            if image_paths:
+                content = [{"type": "text", "text": prompt}]
+                for image_path in image_paths:
+                    content.append({"type": "image_url", "image_url": {"url": image_to_data_url(image_path)}})
+                messages = [{"role": "user", "content": content}]
+            else:
+                messages = [{"role": "user", "content": prompt}]
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
             )
             return response.choices[0].message.content or ""
         except Exception as chat_error:
@@ -55,19 +96,39 @@ def call_model(prompt: str, api_key: str, base_url: str, model: str) -> str:
             ) from chat_error
 
 
-def build_answer_doc(kb: h.KnowledgeBase, questions: list[str], settings: dict) -> str:
+def build_answer_doc(kb: h.KnowledgeBase, questions: list[dict], settings: dict) -> str:
     sections: list[str] = []
-    for idx, question in enumerate(questions, 1):
-        evidence = h.retrieve(kb.blocks, question, settings["top_k"])
-        verdict = h.assess_grounding(question, evidence, kb)
+    for idx, item in enumerate(questions, 1):
+        question = item["text"]
+        image_paths = item.get("image_paths", [])
+        retrieval_text = question if item["type"] == "text" else item.get("retrieval_text", "")
+        evidence = h.retrieve(kb.blocks, retrieval_text, settings["top_k"]) if retrieval_text else []
+        verdict = h.assess_grounding(retrieval_text or question, evidence, kb)
         banner = h.provenance_banner(verdict)
+        image_list = "\n".join(f"- {p}" for p in image_paths)
         question_recap = f"## 题目复述\n{question}"
+        if image_paths:
+            question_recap += f"\n\n题目图片：\n{image_list}"
 
         if settings["use_model"]:
             prompt = h.make_prompt(question, evidence, kb, settings["external_context"], verdict)
-            answer = call_model(prompt, settings["api_key"], settings["base_url"], settings["model"])
+            if image_paths:
+                prompt += (
+                    "\n\n题目以图片形式提供。请先读取图片题干并在“题目复述”中复述完整题目；"
+                    "如果图片内容识别不清，必须明确说明。"
+                )
+            answer = call_model(prompt, settings["api_key"], settings["base_url"], settings["model"], image_paths)
         else:
-            answer = h.offline_answer(question, evidence, kb, verdict)
+            if image_paths:
+                answer = (
+                    "## 标准答案草稿\n"
+                    "题目以图片形式提供。离线模式不能可靠识别图片题干；请交给支持图片输入的模型/agent，"
+                    "或手动补充文字题目。\n\n"
+                    "## 资料不一致风险\n"
+                    "- 当前未读取图片内容，不能生成真实答案。\n"
+                )
+            else:
+                answer = h.offline_answer(question, evidence, kb, verdict)
 
         findings = h.compliance_check(answer, evidence, kb, verdict)
         blocked = [f for f in findings if f.severity == "block"]
@@ -178,10 +239,23 @@ def main() -> None:
 
         st.subheader("2. 输入题目")
         questions_text = st.text_area(
-            "每题之间空一行，或用 1. / 2. 编号",
+            "文字题目（可选）：每题之间空一行，或用 1. / 2. 编号",
             height=220,
-            value="1. 请在这里输入题目。",
+            value="",
         )
+        question_image_uploads = st.file_uploader(
+            "题目图片（可选，可多张）：截图、照片、扫描题都可以",
+            type=["png", "jpg", "jpeg", "webp"],
+            accept_multiple_files=True,
+        )
+        question_images: list[Path] = []
+        if question_image_uploads:
+            question_images = save_question_images(question_image_uploads)
+            st.write("题目图片预览：")
+            for p in question_images:
+                st.image(str(p), caption=p.name, use_container_width=True)
+            st.caption("图片题目需要支持图片输入的模型，或交给能看图的 agent。")
+        combine_images = st.checkbox("把多张题目图片合并为一道题", value=True)
         external_context = st.text_area("可选：外部补充资料", height=120)
 
     with col_right:
@@ -193,10 +267,30 @@ def main() -> None:
             if use_model and (not api_key.strip() or not model.strip()):
                 st.error("自定义 API 模式需要 API Key 和 Model。默认模式不需要 key。")
                 return
-            questions = split_questions(questions_text)
+            text_questions = split_questions(questions_text) if questions_text.strip() else []
+            questions = [{"type": "text", "text": q, "image_paths": []} for q in text_questions]
+            if question_images and combine_images:
+                questions.append({
+                    "type": "image",
+                    "text": "图片题目：请按顺序读取所有上传的题目图片并作答。",
+                    "retrieval_text": questions_text.strip(),
+                    "image_paths": question_images,
+                })
+            elif question_images:
+                for idx, image_path in enumerate(question_images, 1):
+                    questions.append({
+                        "type": "image",
+                        "text": f"图片题目 {idx}：请读取上传的题目图片并作答。",
+                        "retrieval_text": questions_text.strip(),
+                        "image_paths": [image_path],
+                    })
             if not questions:
-                st.error("没有识别到题目。")
+                st.error("请至少输入文字题目或上传题目图片。")
                 return
+            if question_images and use_model:
+                st.info("检测到题目图片：请确认所选模型支持图片输入。")
+            if question_images and not use_model:
+                st.warning("当前是默认/离线模式，app 不会识别题目图片；输出会提示交给支持图片输入的 agent 或模型。")
 
             with st.status("构建知识库...", expanded=True) as status:
                 kb = h.build_kb(saved_files)

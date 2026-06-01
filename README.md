@@ -69,7 +69,7 @@ python -m streamlit run standard_answer_harness/app.py
 - 上传 PDF / DOCX / PPTX / TXT / MD 课件。
 - 诊断 PDF 是否为扫描/图片型。
 - 生成最后页图和 contact sheet。
-- 输入题目。
+- 输入文字题目，或上传题目图片；题目图片支持多张，可合并为一道题或按图片拆分。
 - 默认使用“交给 agent / 离线证据草稿”模式，不要求用户提供 OpenAI Key。
 - 可选填写自己的 API Key / Base URL / Model，调用 OpenAI 或 OpenAI-compatible 服务生成完整答案。
 
@@ -78,7 +78,8 @@ API Key 只在本地 Streamlit 会话中使用，不写入仓库。
 重要提醒：
 
 - 如果你处理的是扫描 PDF、截图、页图核对等视觉任务，请选择**支持图片输入的模型**。
-- 如果模型只支持文本输入，它只能处理 harness 抽取到的文字，不能理解渲染出来的页图。
+- 如果题目本身是截图/照片，请选择**支持图片输入的模型**，或把题目图片交给能看图的 agent。
+- 如果模型只支持文本输入，它只能处理 harness 抽取到的文字，不能理解渲染出来的页图或题目图片。
 - 不想填 key 时，直接使用默认模式，把输出的诊断、contact sheet、页图和证据草稿交给 agent 使用即可。
 
 ### 0. `diagnose-pdf` — 先判断 PDF 是文本型还是扫描型
