@@ -5,6 +5,7 @@ import shutil
 import sys
 import tempfile
 import base64
+import json
 from pathlib import Path
 
 import streamlit as st
@@ -14,6 +15,7 @@ import harness as h
 
 APP_DIR = Path(__file__).resolve().parent
 WORK_DIR = APP_DIR / "app_workspace"
+LOCAL_CONFIG = APP_DIR / ".local_config.json"
 
 
 def save_uploads(files) -> list[Path]:
@@ -50,6 +52,20 @@ def save_question_images(files) -> list[Path]:
         target.write_bytes(file.getbuffer())
         saved.append(target)
     return saved
+
+
+def load_local_config() -> dict:
+    if not LOCAL_CONFIG.exists():
+        return {}
+    try:
+        return json.loads(LOCAL_CONFIG.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_local_config(config: dict) -> None:
+    # Local convenience only. This file is ignored by git.
+    LOCAL_CONFIG.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def call_model(prompt: str, api_key: str, base_url: str, model: str, image_paths: list[Path] | None = None) -> str:
@@ -161,6 +177,7 @@ def main() -> None:
     st.set_page_config(page_title="AI Assignment Assistant", layout="wide")
     st.title("AI Assignment Assistant")
     st.caption("基于课件生成合规标准答案；可交给 agent 使用，也可填自己的兼容 API。")
+    local_config = load_local_config()
 
     with st.sidebar:
         st.header("模型设置")
@@ -174,10 +191,18 @@ def main() -> None:
             help="默认不要求用户提供 OpenAI Key。你可以把诊断、页图和证据交给 agent 继续处理；也可以填自己的 API。"
         )
         use_model = run_mode == "使用我自己的兼容 API"
-        api_key = st.text_input("API Key（仅自定义 API 模式需要）", type="password", value=os.getenv("OPENAI_API_KEY", ""))
-        base_url = st.text_input("Base URL（OpenAI 可留空；兼容服务填写自己的 URL）", value=os.getenv("OPENAI_BASE_URL", ""))
-        model = st.text_input("Model", value=os.getenv("STANDARD_ANSWER_MODEL", "gpt-4.1-mini"))
-        st.info("如果要让模型理解扫描 PDF 的页图/截图，请选择支持图片输入的模型；纯文本模型只能处理抽取出来的文字。")
+        default_api_key = local_config.get("api_key") or os.getenv("OPENAI_API_KEY", "")
+        default_base_url = local_config.get("base_url") or os.getenv("OPENAI_BASE_URL", "")
+        default_model = local_config.get("model") or os.getenv("STANDARD_ANSWER_MODEL", "gpt-4.1-mini")
+
+        with st.expander("填写 API Key / URL / 模型", expanded=use_model):
+            api_key = st.text_input("API Key", type="password", value=default_api_key)
+            base_url = st.text_input("Base URL（OpenAI 可留空；兼容服务填写自己的 URL）", value=default_base_url)
+            model = st.text_input("Model（图片题请选择支持图片输入的模型）", value=default_model)
+            if st.button("保存到本机配置"):
+                save_local_config({"api_key": api_key, "base_url": base_url, "model": model})
+                st.success("已保存到本机 .local_config.json（不会提交到仓库）")
+        st.info("图片题、扫描 PDF 页图、截图题需要支持图片输入的模型；纯文本模型只能处理抽取出来的文字。")
         top_k = st.number_input("检索证据数量", min_value=1, max_value=20, value=6)
 
         st.header("工作区")

@@ -25,3 +25,5 @@ Thumbs.db
 # ---- 密钥：绝不入库 ----
 .env
 *.key
+.local_config.json
+app_workspace/

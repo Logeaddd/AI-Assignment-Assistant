@@ -1,6 +1,6 @@
 # Standard Answer Harness
 
-面向授课教师(和像我一样想偷懒bushi)的**“课件口径标准答案”本地 harness和app（测试中）**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
+面向授课教师的**“课件口径标准答案”本地 harness**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
 
 它最大的特点不是“能答题”，而是**不会把模型自己的先验冒充成课件标准答案**。证据不足时它会明说；AI 可以补全，但必须告诉用户“这部分可能与资料不一致，非课件直接依据”。
 (主要是防被查到用了ai🥺，由于ai可能存在的防止学生偷懒的限制，你可以装作老师...）
@@ -54,6 +54,22 @@ pip install -r requirements.txt
 
 ## 本地极简 App
 
+### 一键启动（Windows）
+
+直接双击：
+
+```text
+run_windows.bat
+```
+
+它会自动：
+
+- 创建本地 `.venv`
+- 安装依赖
+- 启动 app
+
+### 手动启动
+
 启动：
 
 ```bash
@@ -74,6 +90,7 @@ python -m streamlit run standard_answer_harness/app.py
 - 输入文字题目，或上传题目图片；题目图片支持多张，可合并为一道题或按图片拆分。
 - 默认使用“交给 agent / 离线证据草稿”模式，不要求用户提供 OpenAI Key。
 - 可选填写自己的 API Key / Base URL / Model，调用 OpenAI 或 OpenAI-compatible 服务生成完整答案。
+- 也可以直接在 UI 里保存本机配置，系统会写到 `standard_answer_harness/.local_config.json`，不会进仓库。
 
 API Key 只在本地 Streamlit 会话中使用，不写入仓库。
 
@@ -258,3 +275,8 @@ python _selftest.py
 
 ---
 
+## 发布到 GitHub 前请注意
+
+- 仓库已带 `.gitignore`，默认忽略 `out/`（生成产物）和 `*.pptx/*.docx/*.pdf`（课件原件可能含版权内容）。
+- 建议把 `standard_answer_harness/` 作为独立仓库发布，**不要**把上层目录里的课件一起推上去。
+- 示例题目（`*.md`）如含真实课程内容，发布前请脱敏。
