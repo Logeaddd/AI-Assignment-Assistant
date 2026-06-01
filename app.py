@@ -99,14 +99,24 @@ def split_questions(text: str) -> list[str]:
 def main() -> None:
     st.set_page_config(page_title="AI Assignment Assistant", layout="wide")
     st.title("AI Assignment Assistant")
-    st.caption("基于课件生成合规标准答案；允许 AI 补全，但必须标注可能与资料不一致。")
+    st.caption("基于课件生成合规标准答案；可交给 agent 使用，也可填自己的兼容 API。")
 
     with st.sidebar:
         st.header("模型设置")
-        use_model = st.toggle("调用模型生成完整答案", value=False)
-        api_key = st.text_input("API Key", type="password", value=os.getenv("OPENAI_API_KEY", ""))
-        base_url = st.text_input("Base URL", value=os.getenv("OPENAI_BASE_URL", ""))
+        run_mode = st.radio(
+            "使用方式",
+            [
+                "交给 agent / 离线证据草稿",
+                "使用我自己的兼容 API",
+            ],
+            index=0,
+            help="默认不要求用户提供 OpenAI Key。你可以把诊断、页图和证据交给 agent 继续处理；也可以填自己的 API。"
+        )
+        use_model = run_mode == "使用我自己的兼容 API"
+        api_key = st.text_input("API Key（仅自定义 API 模式需要）", type="password", value=os.getenv("OPENAI_API_KEY", ""))
+        base_url = st.text_input("Base URL（OpenAI 可留空；兼容服务填写自己的 URL）", value=os.getenv("OPENAI_BASE_URL", ""))
         model = st.text_input("Model", value=os.getenv("STANDARD_ANSWER_MODEL", "gpt-4.1-mini"))
+        st.info("如果要让模型理解扫描 PDF 的页图/截图，请选择支持图片输入的模型；纯文本模型只能处理抽取出来的文字。")
         top_k = st.number_input("检索证据数量", min_value=1, max_value=20, value=6)
 
         st.header("工作区")
@@ -181,7 +191,7 @@ def main() -> None:
                 st.error("请先上传课件。")
                 return
             if use_model and (not api_key.strip() or not model.strip()):
-                st.error("调用模型需要 API Key 和 Model。")
+                st.error("自定义 API 模式需要 API Key 和 Model。默认模式不需要 key。")
                 return
             questions = split_questions(questions_text)
             if not questions:

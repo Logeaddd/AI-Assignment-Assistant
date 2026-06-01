@@ -1,10 +1,6 @@
 # Standard Answer Harness
 
-单纯用AI作答，常会出现编造内容、缺漏要点的情况，符号与行文风格不符也容易暴露AI痕迹。这套流程会基于课件规范AI输出，杜绝随意发挥，生成规整标准的答案，老师和学生都能用。
-
-Standalone AI may produce fictional or incomplete answers, and mismatched symbols will give away AI-generated content. Our system guides the AI to follow course materials closely and refrain from random creation, resulting in well-organized standard answers that serve both teachers and students well.
-
-面向授课教师（或者学生）的**“课件口径标准答案”本地 harness**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
+面向授课教师的**“课件口径标准答案”本地 harness**。它把 PDF / Word / PPT 课件解析成课程知识库，按题目检索课件证据，再生成或辅助生成标准答案——并且在生成前先**诚实地判断课件到底能不能支撑这道题**。
 
 它最大的特点不是“能答题”，而是**不会把模型自己的先验冒充成课件标准答案**。证据不足时它会明说；AI 可以补全，但必须告诉用户“这部分可能与资料不一致，非课件直接依据”。
 
@@ -29,7 +25,7 @@ pip install -r requirements.txt
 
 - 核心依赖：`python-docx` / `python-pptx` / `pdfplumber` / `PyPDF2`
 - `PyMuPDF` / `Pillow` 用于渲染 PDF 页图和 contact sheet。
-- `openai` 是可选的：不装也能用 `build` / `diagnose` / `inspect` / `answer` 的**离线检索模式**，只是 `answer` 不会调用大模型生成连贯答案，而是给出“课件证据草稿”。
+- `openai` 是可选的：不装也能用 `build` / `diagnose` / `inspect` / `answer` 的**离线检索模式**，只是 `answer` 不会在工具内部调用模型生成连贯答案，而是给出“课件证据草稿”。用户也可以把草稿、页图和诊断结果直接交给自己的 agent 继续处理。
 - `pytesseract` 只是 OCR 接口；本机还必须安装 Tesseract 可执行程序。没有 OCR 引擎时，harness 会明确提示不可用，不会假装识别成功。
 
 ---
@@ -66,10 +62,16 @@ python -m streamlit run standard_answer_harness/app.py
 - 诊断 PDF 是否为扫描/图片型。
 - 生成最后页图和 contact sheet。
 - 输入题目。
-- 在侧栏填写 API Key / Base URL / Model。
-- 选择离线证据草稿或调用模型生成完整答案。
+- 默认使用“交给 agent / 离线证据草稿”模式，不要求用户提供 OpenAI Key。
+- 可选填写自己的 API Key / Base URL / Model，调用 OpenAI 或 OpenAI-compatible 服务生成完整答案。
 
 API Key 只在本地 Streamlit 会话中使用，不写入仓库。
+
+重要提醒：
+
+- 如果你处理的是扫描 PDF、截图、页图核对等视觉任务，请选择**支持图片输入的模型**。
+- 如果模型只支持文本输入，它只能处理 harness 抽取到的文字，不能理解渲染出来的页图。
+- 不想填 key 时，直接使用默认模式，把输出的诊断、contact sheet、页图和证据草稿交给 agent 使用即可。
 
 ### 0. `diagnose-pdf` — 先判断 PDF 是文本型还是扫描型
 
@@ -178,7 +180,7 @@ python harness.py answer \
   --out out/answers.md
 ```
 
-启用大模型生成完整答案：
+可选：使用自己的兼容 API 在 CLI 内生成完整答案：
 
 ```bash
 export OPENAI_API_KEY="你的 key"
@@ -188,6 +190,8 @@ python harness.py answer \
   --questions sample_questions.md \
   --out out/answers.md
 ```
+
+这不是必需步骤。也可以不填 key，只生成离线证据草稿，然后交给 agent 继续处理。
 
 > Windows PowerShell 用 `$env:OPENAI_API_KEY="..."`，命令续行用反引号 `` ` `` 而非 `\`。
 
@@ -243,3 +247,8 @@ python _selftest.py
 
 ---
 
+## 发布到 GitHub 前请注意
+
+- 仓库已带 `.gitignore`，默认忽略 `out/`（生成产物）和 `*.pptx/*.docx/*.pdf`（课件原件可能含版权内容）。
+- 建议把 `standard_answer_harness/` 作为独立仓库发布，**不要**把上层目录里的课件一起推上去。
+- 示例题目（`*.md`）如含真实课程内容，发布前请脱敏。
