@@ -166,6 +166,23 @@ python harness.py ocr-pages --pdf course.pdf --pages 31,32,73-80 --out tmp/pdfs/
 
 原则：**不默认全量 OCR**。先定位/人工看 contact sheet，再只 OCR 关键页；这样更快，也减少 OCR 错误污染答案。
 
+### 0.4. `extract-formula-pages` — 扫描公式页核对包
+
+```bash
+python harness.py extract-formula-pages \
+  --pdf course.pdf \
+  --pages 31,32,73-80 \
+  --out tmp/pdfs/formula_review
+```
+
+它不会假装本地识别出了公式，而是：
+
+- 渲染指定公式页为高清图片。
+- 生成 `formula_extraction_prompt.md`。
+- 生成 `formula_pages_manifest.json`。
+
+这些图片和 prompt 可以交给支持图片输入的模型或人工核对，用来提取课件原公式。
+
 ### 1. `build` — 构建课件知识库
 
 ```bash

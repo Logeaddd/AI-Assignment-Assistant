@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
 import shutil
 import sys
+import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from xml.etree import ElementTree as ET
 from typing import Iterable
 
 
@@ -23,6 +26,11 @@ SCANNED_TEXT_RATIO = 0.5
 FORMULA_QUESTION_HINTS = (
     "公式", "导出", "推导", "表示式", "定义式", "证明", "计算", "方程",
     "formula", "derive", "equation", "expression",
+)
+MATH_HINT_CHARS = set("=≈∝≤≥<>±×÷·√∑∫∂∆Δ∇∞πµθλβγσρΩωαηκφχψ")
+MATH_HINT_WORDS = (
+    "sin", "cos", "tan", "exp", "log", "ln", "frac", "sqrt", "sum", "int",
+    "dot", "partial", "nabla", "gamma", "beta", "theta", "lambda", "omega",
 )
 
 
@@ -76,6 +84,49 @@ def normalize_text(text: str) -> str:
     return text.strip()
 
 
+def extract_office_math_text(path: Path) -> list[SourceBlock]:
+    """Extract Office Math (OMML) text from docx/pptx packages.
+
+    This is not full LaTeX conversion. It deliberately returns the visible math
+    tokens so formula-bearing files are no longer counted as "zero formulas"
+    when equations live in Office math XML rather than plain paragraphs.
+    """
+    blocks: list[SourceBlock] = []
+    if path.suffix.lower() not in {".docx", ".pptx"}:
+        return blocks
+
+    math_ns = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
+    text_tags = {f"{math_ns}t", f"{math_ns}chr", f"{math_ns}pos"}
+    try:
+        with zipfile.ZipFile(path) as zf:
+            xml_names = [
+                name for name in zf.namelist()
+                if name.endswith(".xml") and (
+                    name.startswith("word/") or name.startswith("ppt/slides/")
+                )
+            ]
+            math_idx = 1
+            for name in xml_names:
+                data = zf.read(name)
+                if b"officeDocument/2006/math" not in data:
+                    continue
+                root = ET.fromstring(data)
+                for math_node in root.iter(f"{math_ns}oMath"):
+                    parts: list[str] = []
+                    for node in math_node.iter():
+                        if node.tag in text_tags:
+                            text = node.text or node.attrib.get(f"{math_ns}val", "")
+                            if text:
+                                parts.append(text)
+                    formula = normalize_text(" ".join(parts))
+                    if formula:
+                        blocks.append(SourceBlock(str(path), f"office-math {math_idx} ({name})", formula))
+                        math_idx += 1
+    except Exception:
+        return blocks
+    return blocks
+
+
 def _finalize_diag(diag: MaterialDiagnostic) -> MaterialDiagnostic:
     diag.text_ratio = (diag.units_with_text / diag.units_total) if diag.units_total else 0.0
     # A document is "likely scanned / image-heavy" when most of its units carry
@@ -116,6 +167,10 @@ def extract_docx(path: Path) -> tuple[list[SourceBlock], MaterialDiagnostic]:
             joined = "\n".join(rows)
             diag.chars_extracted += len(joined)
             blocks.append(SourceBlock(str(path), f"table {table_idx}", joined))
+    math_blocks = extract_office_math_text(path)
+    blocks.extend(math_blocks)
+    if math_blocks:
+        diag.chars_extracted += sum(len(b.text) for b in math_blocks)
     return blocks, _finalize_diag(diag)
 
 
@@ -146,6 +201,10 @@ def extract_pptx(path: Path) -> tuple[list[SourceBlock], MaterialDiagnostic]:
             diag.units_with_text += 1
             diag.chars_extracted += len(text)
             blocks.append(SourceBlock(str(path), f"slide {slide_idx}", text))
+    math_blocks = extract_office_math_text(path)
+    blocks.extend(math_blocks)
+    if math_blocks:
+        diag.chars_extracted += sum(len(b.text) for b in math_blocks)
     return blocks, _finalize_diag(diag)
 
 
@@ -390,11 +449,26 @@ def chunk_block(block: SourceBlock, max_chars: int = 1200) -> list[SourceBlock]:
 
 def find_formulas(blocks: Iterable[SourceBlock]) -> list[str]:
     candidates: list[str] = []
-    formula_line = re.compile(r"(^|[\s:：])[\wα-ωΑ-ΩµπθλβγσρΔΩ]+.*[=≈∝≤≥<>].+")
+    formula_line = re.compile(r"(^|[\s:：])[\wα-ωΑ-ΩµπθλβγσρΔΩ\\{}^_()|/+\-]+.*[=≈∝≤≥<>].+")
+    latex_display = re.compile(r"(\\[a-zA-Z]+|[_^{}]|\\\\|\\frac|\\sqrt|\\sum|\\int)")
     for block in blocks:
         for line in block.text.splitlines():
             line = normalize_text(line)
-            if 4 <= len(line) <= 240 and formula_line.search(line):
+            if not (3 <= len(line) <= 320):
+                continue
+            math_chars = sum(1 for ch in line if ch in MATH_HINT_CHARS)
+            math_words = sum(1 for word in MATH_HINT_WORDS if re.search(rf"\b{re.escape(word)}\b", line, re.I))
+            digit_ops = len(re.findall(r"[A-Za-zα-ωΑ-Ω]\s*[_^]?\s*[=+\-*/]", line))
+            looks_formula = (
+                bool(formula_line.search(line))
+                or bool(latex_display.search(line))
+                or math_chars >= 2
+                or math_words >= 2
+                or digit_ops >= 2
+            )
+            # Avoid capturing ordinary prose with one comparison sign.
+            cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", line))
+            if looks_formula and cjk_chars / max(len(line), 1) < 0.65:
                 candidates.append(line)
     return unique_preserve_order(candidates)
 
@@ -1038,6 +1112,49 @@ def command_locate_pages(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_extract_formula_pages(args: argparse.Namespace) -> int:
+    pdf = Path(args.pdf).resolve()
+    if not pdf.exists():
+        print(f"Missing PDF: {pdf}", file=sys.stderr)
+        return 2
+    out_dir = Path(args.out).resolve()
+    safe_pdf = prepare_pdf_path(pdf, out_dir)
+    diag, _low_pages, _engine = diagnose_pdf_file(safe_pdf)
+    if args.pages:
+        pages = parse_pages(args.pages)
+    else:
+        last_n = max(1, args.last_pages)
+        pages = list(range(max(1, diag.units_total - last_n + 1), diag.units_total + 1))
+
+    rendered = render_pdf_pages(safe_pdf, out_dir / "formula_pages", pages, zoom=args.zoom)
+    prompt = """请从这些课件页图中只提取公式、变量定义和题目原文。
+
+要求：
+1. 不要解题，不要补全课件里没有的公式。
+2. 每条公式标注页码。
+3. 如果公式看不清，写“看不清”，不要猜。
+4. 输出 Markdown，分为：题目原文、公式清单、变量定义、无法确认之处。
+"""
+    prompt_path = out_dir / "formula_extraction_prompt.md"
+    prompt_path.write_text(prompt, encoding="utf-8")
+    manifest = {
+        "pdf": str(pdf),
+        "safe_pdf": str(safe_pdf),
+        "pages": pages,
+        "rendered_images": [asdict(ev) for ev in rendered],
+        "prompt": str(prompt_path),
+        "note": "Use these page images with a vision-capable model or manual review. No formula OCR is claimed here.",
+    }
+    manifest_path = out_dir / "formula_pages_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"Rendered formula review pages: {[ev.page_number for ev in rendered]}")
+    for ev in rendered:
+        print(f"- page {ev.page_number}: {ev.rendered_image_path}")
+    print(f"Vision/manual extraction prompt: {prompt_path}")
+    print(f"Manifest: {manifest_path}")
+    return 0
+
+
 def command_diagnose(args: argparse.Namespace) -> int:
     """Inspect a KB's extraction health without re-building it. Answers the only
     question that matters before trusting answers: can this courseware actually
@@ -1202,6 +1319,14 @@ def make_parser() -> argparse.ArgumentParser:
     locate.add_argument("--query", required=True)
     locate.add_argument("--max-pages", type=int, default=20)
     locate.set_defaults(func=command_locate_pages)
+
+    formula_pages = subparsers.add_parser("extract-formula-pages", help="Render selected PDF pages and create a vision/manual formula extraction prompt.")
+    formula_pages.add_argument("--pdf", required=True)
+    formula_pages.add_argument("--pages", help="Comma/range list, e.g. 31,32,73-80. If omitted, renders the last pages.")
+    formula_pages.add_argument("--last-pages", type=int, default=1)
+    formula_pages.add_argument("--out", default="tmp/pdfs/formula_pages")
+    formula_pages.add_argument("--zoom", type=float, default=2.2)
+    formula_pages.set_defaults(func=command_extract_formula_pages)
 
     return parser
 
