@@ -1,4 +1,9 @@
-"""Self-test: prove unlabeled AI supplementation is blocked, labeled supplementation is allowed."""
+"""Self-test: prove unlabeled AI supplementation is blocked.
+
+Formula/derivation questions over scanned PDFs with zero extracted formulas are
+also blocked as publishable "standard answers", even if honestly labeled. They
+may still be useful as risk drafts, but the compliance gate must not pass them.
+"""
 import importlib.util
 import sys
 from pathlib import Path
@@ -56,7 +61,8 @@ for f in findings_a:
 print("  -> blocked?", bool(blocks_a))
 
 # Case B: same content but honestly self-labeled as model supplementation.
-# This is allowed by the current policy.
+# For scanned formula coursework with zero extracted formulas, this should still
+# be blocked as a publishable standard answer. It is only a risk draft.
 honest = (
     "## 题目复述\n写出带电粒子辐射角分布的一般公式，并推导其非相对论极限。\n"
     "## 标准答案\n课件证据不足，以下公式为 [模型推导]：dP/dOmega = ... 。"
@@ -70,5 +76,5 @@ for f in findings_b:
 print("  -> blocked?", bool(blocks_b))
 
 assert blocks_a, "FAIL: dishonest answer should have been blocked"
-assert not blocks_b, "FAIL: honest answer should NOT have been blocked"
-print("\nSELFTEST PASS: unlabeled supplementation is blocked; labeled AI supplementation is allowed.")
+assert blocks_b, "FAIL: scanned formula answer with zero extracted formulas should stay blocked"
+print("\nSELFTEST PASS: scanned formula answers remain blocked until formula evidence is recovered.")

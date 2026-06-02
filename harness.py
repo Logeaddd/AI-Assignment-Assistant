@@ -608,6 +608,26 @@ def provenance_banner(verdict: GroundingVerdict) -> str:
     return "\n".join(lines)
 
 
+def kb_has_scanned_material(kb: KnowledgeBase) -> bool:
+    return any(d.likely_scanned for d in kb.diagnostics)
+
+
+def formula_extraction_warning(kb: KnowledgeBase, verdict: GroundingVerdict | None = None) -> str:
+    if kb.formulas:
+        return ""
+    scanned = kb_has_scanned_material(kb)
+    if not scanned and (verdict is None or not verdict.is_formula_question):
+        return ""
+    return (
+        "## 公式识别状态\n"
+        "- **未识别到任何课件公式。**\n"
+        "- 当前系统没有从文本层/OCR 中抽取出公式；如果课件是扫描页、图片公式或 Office 公式，"
+        "这里不能证明后续公式来自课件。\n"
+        "- 因此本题不能标为“课件标准答案”。如出现公式，只能标注为 `[模型推导]`、`[外部资料]` "
+        "或 `[页图核对]`，并需要人工/视觉模型核对。"
+    )
+
+
 def _grounding_instructions(verdict: GroundingVerdict | None) -> str:
     """Inject grounding-state-specific rules into the prompt so the model is
     forced to label provenance honestly instead of dressing up its own prior
@@ -683,8 +703,11 @@ def call_openai(prompt: str, model: str) -> str:
 
 
 def offline_answer(question: str, evidence: list[SourceBlock], kb: KnowledgeBase, verdict: GroundingVerdict | None = None) -> str:
+    formula_warning = formula_extraction_warning(kb, verdict)
     if not evidence:
-        return f"""## 标准答案草稿
+        return f"""{formula_warning}
+
+## 风险草稿
 课件证据不足。离线模式不会自行补全答案；如需 AI 补全，请启用模型，并把补全部分标注为 `[模型推导]`，同时说明可能与资料不一致。
 
 ## 资料不一致风险
@@ -704,7 +727,9 @@ def offline_answer(question: str, evidence: list[SourceBlock], kb: KnowledgeBase
     # says so plainly instead of producing a confident-looking draft.
     if verdict is not None and verdict.level != "grounded":
         honest = "课件证据不足" if verdict.level == "ungrounded" else "课件证据较薄，需人工/页图核对"
-        return f"""## 标准答案草稿
+        return f"""{formula_warning}
+
+## 风险草稿
 {honest}。未调用大模型，仅列出可引用的课件检索证据；如需完整作答，可由 AI 补全，但必须标注 `[模型推导]` 并说明可能与资料不一致：
 
 {cited}
@@ -758,6 +783,11 @@ def compliance_check(answer: str, evidence: list[SourceBlock], kb: KnowledgeBase
         findings.append(ComplianceFinding("block", "没有匹配证据但未说明答案可能与资料不一致。"))
 
     if verdict is not None:
+        if verdict.is_formula_question and kb_has_scanned_material(kb) and not kb.formulas:
+            findings.append(ComplianceFinding(
+                "block",
+                "扫描/图片型课件未识别到任何公式；本题是公式/推导类，不能标为课件标准答案，只能作为风险草稿或经页图/OCR/人工核对后发布。",
+            ))
         if verdict.level == "ungrounded" and not has_honest_marker:
             findings.append(ComplianceFinding(
                 "block",

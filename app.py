@@ -322,6 +322,11 @@ def main() -> None:
                 st.write(f"文本块：{len(kb.blocks)}")
                 st.write(f"公式候选：{len(kb.formulas)}")
                 st.write(f"格式规则：{len(kb.format_rules)}")
+                if any(d.likely_scanned for d in kb.diagnostics) and not kb.formulas:
+                    st.error(
+                        "公式识别失败：课件疑似扫描/图片型，且自动抽取公式数为 0。"
+                        "公式/推导题不能当作课件标准答案，只能输出风险草稿，必须用页图/OCR/人工或视觉模型核对。"
+                    )
                 for d in kb.diagnostics:
                     if d.likely_scanned:
                         st.warning(f"{Path(d.source).name}: 疑似扫描/图片型，文本接地不可靠。")
